@@ -21,8 +21,8 @@ import torch.nn.functional as F
 
 from configs import TrainConfig
 
-from ..dw_utils import make_path, seed_everything
-from ..dw_utils.image import tensor2image
+from dw_utils import make_path, seed_everything
+from dw_utils.image import tensor2image
 
 from data.camera import CameraDataset, CameraDatasetWithSMPL
 from data.iterator import DataLoaderManager
@@ -283,9 +283,13 @@ class _Checkpointer:
         }
 
         if full:
-            state["optimizers"] = [
-                optimizer.state_dict() for optimizer in self.optimizers
-            ]
+            # state["optimizers"] = [
+            #     optimizer.state_dict() for optimizer in self.optimizers
+            # ]
+            state["optimizers"] = {
+                name: optimizer.state_dict()
+                for name, optimizer in self.optimizers.items()
+            }
             state["scaler"] = self.scaler.state_dict()
 
         state["model"] = self.model.state_dict()
@@ -364,8 +368,11 @@ class Trainer(_Visualizer, _Checkpointer, _Logger):
 
         seed_everything(self.cfg.optim.seed)
 
-        self.exp_path = make_path(self.cfg.log.exp_dir)
-        self.ckpt_path = make_path(self.exp_path / "checkpoints")
+        # Ensure the use of Path for cross-platform path handling
+        self.exp_path = make_path(Path(self.cfg.log.exp_dir))  # Convert to Path
+        self.ckpt_path = make_path(
+            self.exp_path / "checkpoints"
+        )  # Use Path for concatenation
 
         self.init_logger()
 
@@ -409,7 +416,7 @@ class Trainer(_Visualizer, _Checkpointer, _Logger):
 
         # 5. Training-only Initialization
         if not self.cfg.log.eval_only:
-            # Make path
+            # Use Path for creating directories
             self.snapshot_train_path = make_path(self.exp_path / "snapshots" / "train")
             self.snapshot_eval_path = make_path(self.exp_path / "snapshots" / "eval")
 
@@ -1061,8 +1068,16 @@ class Trainer(_Visualizer, _Checkpointer, _Logger):
                     logger.info(loss_info)
 
         except RuntimeError as e:
-            self.save_checkpoint(full=True)
-            self.full_eval()
+            print(f"Some error occurred at iteration {self.train_step}")
+            print(f"Some error occurred at iteration {self.train_step}")
+            print(f"Some error occurred at iteration {self.train_step}")
+            print(f"Some error occurred at iteration {self.train_step}")
+            print(f"Some error occurred at iteration {self.train_step}")
+            print(f"Some error occurred at iteration {self.train_step}")
+            # self.save_checkpoint(full=True)
+            # self.full_eval()
+            logger.info(e)
+            logger.info(e)
             logger.info(e)
             return
 
