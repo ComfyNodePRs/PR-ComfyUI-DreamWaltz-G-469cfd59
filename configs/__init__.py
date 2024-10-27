@@ -1,12 +1,5 @@
 import sys
 import os
-
-# Add the path to your Python embedded environment's `site-packages`
-sys.path.append(
-    r"E:\comfyui3.11\ComfyUI_windows_portable_nvidia\ComfyUI_windows_portable\python_embeded\Lib\site-packages"
-)
-
-
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional, Tuple, Union, Any

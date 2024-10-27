@@ -8,6 +8,16 @@ from PIL import Image
 import numpy as np
 
 
+import sys
+import os
+import re
+import subprocess
+from pathlib import Path
+from PIL import Image
+import numpy as np
+import torch
+
+
 class DreamWaltzGStageOneTrainer:
     def __init__(self):
         pass
@@ -22,8 +32,8 @@ class DreamWaltzGStageOneTrainer:
                     {"default": 10000, "min": 1000, "max": 100000, "step": 1000},
                 ),
                 "train_resolution": (
-                    ["64,128,256", "64,128", "128,256", "256"],
-                    {"default": "64,128,256"},
+                    ["64,64", "64,128,256", "512,512"],
+                    {"default": "64,64"},
                 ),
                 "background_mode": (["gray", "white", "black"], {"default": "gray"}),
                 "body_parts": (["hands", "face", "full"], {"default": "hands"}),
@@ -40,11 +50,8 @@ class DreamWaltzGStageOneTrainer:
     CATEGORY = "DreamWaltzG"
 
     def sanitize_prompt(self, prompt):
-        # Remove leading/trailing whitespace
         prompt = prompt.strip()
-        # Replace multiple spaces with single underscore
         prompt = re.sub(r"\s+", "_", prompt)
-        # Remove any special characters except underscores
         prompt = re.sub(r"[^a-zA-Z0-9_]", "", prompt)
         return prompt
 
@@ -64,91 +71,99 @@ class DreamWaltzGStageOneTrainer:
 
         root_folder = Path(os.environ.get("DREAMWALTZ_ROOT_FOLDER", "."))
 
-        exp_name = f"{sanitized_prompt}/nerf_64_256_{iterations}k"
+        train_resolution = train_resolution.split(",")
+
+        if len(train_resolution) == 3:
+            exp_name = f"{sanitized_prompt}/nerf_{train_resolution[0]}_{train_resolution[1]}_{train_resolution[2]}_{iterations // 1000 }k"
+        else:
+            exp_name = f"{sanitized_prompt}/nerf_{train_resolution[0]}_{train_resolution[1]}_{iterations // 1000 }k"
+
         exp_full_path = root_folder / "outputs" / exp_name
-
         checkpoints_folder_path = exp_full_path / "checkpoints"
-
         results_folder_path = exp_full_path / "results" / "1024x1024" / "image"
 
         # Ensure the checkpoints directory exists
         os.makedirs(str(checkpoints_folder_path), exist_ok=True)
 
-        # Define the path to main.py and hardcoded checkpoint path
-        main_script_path = "main.py"
-        checkpoint_path = "external/human_templates/instant-ngp/adult_neutral"
-
-        # Build command with user parameters
-        cmd = [
-            "python",
-            main_script_path,
-            "--guide.text",
-            prompt,
-            "--log.exp_name",
-            exp_name,
-            "--optim.ckpt",
-            checkpoint_path,
-            "--predefined_body_parts",
-            body_parts,
-            "--stage",
-            "nerf",
-            "--nerf.bg_mode",
-            background_mode,
-            "--optim.fp16",
-            str(enable_fp16).lower(),
-            "--optim.iters",
-            str(iterations),
-            "--prompt.scene",
-            scene_type,
-            "--data.train_w",
-            train_resolution,
-            "--data.train_h",
-            train_resolution,
-            "--data.progressive_grid",
-            str(enable_progressive_grid).lower(),
-            "--use_sigma_guidance",
-            str(enable_sigma_guidance).lower(),
-        ]
-
-        print(f"Original prompt: {prompt}")
-        print(f"Sanitized prompt: {sanitized_prompt}")
-        print(f"Executing command from directory: {root_folder}")
-        print(f"Executing command: {' '.join(cmd)}")
-
-        try:
-            process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1,
-                universal_newlines=True,
-                cwd=str(root_folder),
+        # Find the latest checkpoint in the experiment's output directory
+        checkpoint_path = None
+        checkpoint_files = sorted(checkpoints_folder_path.glob("*.pth"), reverse=True)
+        if checkpoint_files:
+            checkpoint_path = str(checkpoint_files[0])  # Use the most recent checkpoint
+        else:
+            # Default to template checkpoint if no previous checkpoint exists
+            checkpoint_path = (
+                "external/human_templates/instant-ngp/adult_neutral/step_005000.pth"
             )
 
-            # Read and print output in real-time
-            while True:
-                output = process.stdout.readline()
-                if output:
-                    print(output.strip(), flush=True)
-                    sys.stdout.flush()
+        # # Build command with user parameters
+        # cmd = [
+        #     "python",
+        #     "main.py",
+        #     "--guide.text",
+        #     prompt,
+        #     "--log.exp_name",
+        #     exp_name,
+        #     "--optim.ckpt",
+        #     checkpoint_path,
+        #     "--optim.resume",
+        #     "True",  # Ensure it resumes if checkpoint exists
+        #     "--predefined_body_parts",
+        #     body_parts,
+        #     "--stage",
+        #     "nerf",
+        #     "--nerf.bg_mode",
+        #     background_mode,
+        #     "--optim.fp16",
+        #     str(enable_fp16).lower(),
+        #     "--optim.iters",
+        #     str(iterations),
+        #     "--prompt.scene",
+        #     scene_type,
+        #     "--data.train_w",
+        #     train_resolution,
+        #     "--data.train_h",
+        #     train_resolution,
+        #     "--data.progressive_grid",
+        #     str(enable_progressive_grid).lower(),
+        #     "--use_sigma_guidance",
+        #     str(enable_sigma_guidance).lower(),
+        # ]
 
-                if process.poll() is not None:
-                    break
+        # print(f"Executing command: {' '.join(cmd)}")
 
-            # Get the return code
-            return_code = process.wait()
+        # try:
+        #     process = subprocess.Popen(
+        #         cmd,
+        #         stdout=subprocess.PIPE,
+        #         stderr=subprocess.STDOUT,
+        #         text=True,
+        #         bufsize=1,
+        #         universal_newlines=True,
+        #         cwd=str(root_folder),
+        #     )
 
-            if return_code != 0:
-                raise subprocess.CalledProcessError(return_code, cmd)
+        #     while True:
+        #         output = process.stdout.readline()
+        #         if output:
+        #             print(output.strip(), flush=True)
+        #             sys.stdout.flush()
 
-        except subprocess.CalledProcessError as e:
-            print(f"Error executing command: {e}")
-            raise Exception(f"Training script failed with error code {e.returncode}")
+        #         if process.poll() is not None:
+        #             break
 
-        except Exception as e:
-            print(f"Unexpected error: {e}")
-            raise
+        #     return_code = process.wait()
+
+        #     if return_code != 0:
+        #         raise subprocess.CalledProcessError(return_code, cmd)
+
+        # except subprocess.CalledProcessError as e:
+        #     print(f"Error executing command: {e}")
+        #     raise Exception(f"Training script failed with error code {e.returncode}")
+
+        # except Exception as e:
+        #     print(f"Unexpected error: {e}")
+        #     raise
 
         images = []
         if os.path.exists(results_folder_path):
@@ -162,13 +177,10 @@ class DreamWaltzGStageOneTrainer:
             for img_file in image_files:
                 img_path = results_folder_path / img_file
                 img = Image.open(img_path).convert("RGB")
-                images.append(
-                    np.array(img, dtype=np.float32) / 255.0
-                )  # Normalized to [0, 1]
+                images.append(np.array(img, dtype=np.float32) / 255.0)
 
         images_tensor = torch.from_numpy(np.stack(images)) if images else None
 
-        print(str(exp_full_path))
         return (str(exp_full_path), images_tensor)
 
 
@@ -237,8 +249,11 @@ class DreamWaltzGStageTwoTrainer:
         lbs_weight_smooth,
         background_color,
     ):
+        # Convert stage one checkpoint path to Path object and resolve to absolute path
+        stage_one_checkpoint_path = Path(stage_one_checkpoint_path).resolve()
+
         # Validate inputs
-        if not os.path.exists(stage_one_checkpoint_path):
+        if not stage_one_checkpoint_path.exists():
             raise ValueError(
                 f"Stage one checkpoint path does not exist: {stage_one_checkpoint_path}"
             )
@@ -247,31 +262,32 @@ class DreamWaltzGStageTwoTrainer:
         bg_color_values = self.validate_background_color(background_color)
 
         # Get the root folder from environment variable or use default
-        root_folder = Path(os.environ.get("DREAMWALTZ_ROOT_FOLDER", "."))
+        root_folder = Path(os.environ.get("DREAMWALTZ_ROOT_FOLDER", ".")).resolve()
 
         # Construct the new experiment name by appending 3dgs suffix
-        exp_name = f"{stage_one_checkpoint_path}-3dgs,cnl,{iterations//1000}k"
-        exp_full_path = Path(exp_name)
+        exp_name = (
+            root_folder
+            / "outputs"
+            / sanitized_prompt
+            / f"3dgs_cnl_{iterations // 1000}k"
+        )
+        exp_checkpoint_full_path = exp_name / "checkpoints"
 
-        # Create checkpoints and results folders
-        checkpoints_folder_path = exp_full_path / "checkpoints"
-        results_folder_path = exp_full_path / "results" / "1024x1024" / "image"
+        # Previous Nerf checkpoint
+        nerf_checkpoint_path = stage_one_checkpoint_path / "checkpoints"
 
-        os.makedirs(str(checkpoints_folder_path), exist_ok=True)
+        # Define the path to main.py relative to root_folder
+        main_script_path = root_folder / "main.py"
 
-        # Define the path to main.py
-        main_script_path = "main.py"
-
-        # Build command with user parameters
         cmd = [
             "python",
-            main_script_path,
+            str(main_script_path),  # Convert Path to str
             "--guide.text",
             prompt,
             "--log.exp_name",
-            exp_name,
+            str(exp_name),  # Convert Path to str
             "--render.from_nerf",
-            str(stage_one_checkpoint_path),
+            str(nerf_checkpoint_path),  # Convert Path to str
             "--predefined_body_parts",
             body_parts,
             "--stage",
@@ -309,8 +325,7 @@ class DreamWaltzGStageTwoTrainer:
             while True:
                 output = process.stdout.readline()
                 if output:
-                    print(output.strip(), flush=True)
-                    sys.stdout.flush()
+                    print(output.strip(), flush=True)  # Flushes each line immediately
 
                 if process.poll() is not None:
                     break
@@ -328,28 +343,28 @@ class DreamWaltzGStageTwoTrainer:
         except Exception as e:
             print(f"Unexpected error: {e}")
             raise
+        results_folder_path = None
 
         # Load and process result images
         images = []
-        if os.path.exists(results_folder_path):
+        if results_folder_path.exists():
             image_files = sorted(
                 [
                     f
-                    for f in os.listdir(results_folder_path)
-                    if f.endswith((".jpg", ".jpeg", ".png"))
+                    for f in results_folder_path.iterdir()
+                    if f.suffix.lower() in (".jpg", ".jpeg", ".png")
                 ]
             )
             for img_file in image_files:
-                img_path = results_folder_path / img_file
-                img = Image.open(img_path).convert("RGB")
+                img = Image.open(img_file).convert("RGB")
                 images.append(
                     np.array(img, dtype=np.float32) / 255.0
                 )  # Normalized to [0, 1]
 
         images_tensor = torch.from_numpy(np.stack(images)) if images else None
 
-        print(f"Training completed. Results saved to: {str(exp_full_path)}")
-        return (str(exp_full_path), images_tensor)
+        print(f"Training completed. Results saved to: {exp_checkpoint_full_path}")
+        return (str(exp_checkpoint_full_path), images_tensor)
 
 
 # Update the mappings for the node
