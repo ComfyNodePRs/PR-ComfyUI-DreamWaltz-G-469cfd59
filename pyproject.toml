@@ -1,0 +1,14 @@
+[project]
+name = "comfyui-dreamwaltz-g"
+description = "This repository contains custom ComfyUI nodes designed to integrate with [a/DreamWaltz-G](https://github.com/Yukun-Huang/DreamWaltz-G), a cutting-edge model for generating expressive 3D Gaussian avatars using skeleton-guided 2D diffusion."
+version = "1.0.0"
+license = {file = "LICENSE"}
+
+[project.urls]
+Repository = "https://github.com/gt732/ComfyUI-DreamWaltz-G"
+#  Used by Comfy Registry https://comfyregistry.org
+
+[tool.comfy]
+PublisherId = ""
+DisplayName = "ComfyUI-DreamWaltz-G"
+Icon = ""
